@@ -17,7 +17,13 @@ export default class BookRequestScreen extends Component{
     this.state ={
       userId : firebase.auth().currentUser.email,
       bookName:"",
-      reasonToRequest:""
+      reasonToRequest:"",
+      isBookRequestActive:'',
+      requestedBookName:'',
+      bookStatus:'',
+      requestId:'',
+      userDocId:'',
+      docId:''
     }
   }
 
@@ -27,7 +33,7 @@ export default class BookRequestScreen extends Component{
 
 
 
-  addRequest =(bookName,reasonToRequest)=>{
+  addRequest = async (bookName,reasonToRequest)=>{
     var userId = this.state.userId
     var randomRequestId = this.createUniqueId()
     db.collection('requested_books').add({
@@ -35,7 +41,20 @@ export default class BookRequestScreen extends Component{
         "book_name":bookName,
         "reason_to_request":reasonToRequest,
         "request_id"  : randomRequestId,
+        "book_status": "requested"
     })
+
+    await this.getBookRequest()
+    db.collection('users').where("email_id","==", userId).get()
+    .then()
+    .then((snapshot)=>{
+      snapshot.forEach((doc)=>{
+        db.collection('users').doc(doc.id).update({
+          isBookRequestActive:true
+        })
+      })
+    })
+
 
     this.setState({
         bookName :'',
@@ -45,43 +64,160 @@ export default class BookRequestScreen extends Component{
     return Alert.alert("Book Requested Successfully")
   }
 
+  receivedBooks=(bookName)=>{
+      var userId = this.state.userId
+      var requestId = this.state.requestId
+      db.collection('received_books').add({
+        "user_id":userId,
+        "book_name":bookName,
+        "request_id":requestId,
+        "bookStatus":"received"
+      })
+  }
 
+  getIsBookRequestActive(){
+    db.collection('users')
+    .where("email_id","==", this.state.userId)
+    .onSnapshot(querySnapshot=>{
+      querySnapshot.forEach(doc=>{
+        this.setState({
+          isBookRequestActive:doc.data().isBookRequestActive,
+          userDocId:doc.Id
+        })
+      })
+    })
+  }
+
+  getBookRequest=()=>{
+    var bookRequest = db.collection('requested_books')
+    .where("user_id","==", this.state.userId).get()
+    .then((snapshot)=>{
+      snapshot.forEach((doc)=>{
+        if(doc.data().book_status!== "received"){
+          this.setState({
+            requestId:doc.data().request_id,
+            requestedBookName:doc.data().book_name,
+            bookStatus:doc.data().book_status,
+            docId:doc.Id
+          })
+        }
+      })
+    })
+
+  }
+
+  sendNotification=()=>{
+    db.collection('users').where('email_id',"==", this.state.userId).get()
+    
+    .then((snapshot)=>{
+      snapshot.forEach((doc)=>{
+          var name = doc.data().first_name
+          var lastName =   doc.data().last_name
+          db.collection('all_notifications').where('request_id','==', this.state.requestId).get()
+          .then((snapshot)=>{
+            snapshot.forEach((doc)=>{
+              var donorId = doc.data().donor_id
+              var bookName = doc.data().book_name
+              db.collection('all_notifications').add({
+                "targeted_user_id":donorId,
+                "message":name+" "+ lastName+" received the book " + bookName,
+                "notification_status":"unread",
+                "book_name":bookName
+              })
+            })
+          })
+      })
+    })
+  }
+  componentDidMount(){
+    this.getBookRequest();
+    this.getIsBookRequestActive();
+
+  }
+
+  updateBookRequestStatus=()=>{
+    db.collection('requested_books').doc(this.state.docId).update({
+      book_status:'received'
+    })
+    db.collection('users').where('email_id',"==", this.state.userId).get()
+    .then((snapshot)=>{
+      snapshot.forEach((doc)=>{
+        db.collection('users').doc(doc.id).update({
+          isBookRequestActive:false
+        })
+      })
+    })
+  }
+
+  
   render(){
-    return(
-        <View style={{flex:1}}>
-          <MyHeader title="Request Book" navigation ={this.props.navigation}/>
-            <KeyboardAvoidingView style={styles.keyBoardStyle}>
-              <TextInput
-                style ={styles.formTextInput}
-                placeholder={"enter book name"}
-                onChangeText={(text)=>{
-                    this.setState({
-                        bookName:text
-                    })
-                }}
-                value={this.state.bookName}
-              />
-              <TextInput
-                style ={[styles.formTextInput,{height:300}]}
-                multiline
-                numberOfLines ={8}
-                placeholder={"Why do you need the book"}
-                onChangeText ={(text)=>{
-                    this.setState({
-                        reasonToRequest:text
-                    })
-                }}
-                value ={this.state.reasonToRequest}
-              />
-              <TouchableOpacity
-                style={styles.button}
-                onPress={()=>{this.addRequest(this.state.bookName,this.state.reasonToRequest)}}
-                >
-                <Text>Request</Text>
-              </TouchableOpacity>
-            </KeyboardAvoidingView>
+    if(this.state.isBookRequestActive===true){
+      return(
+        <View style={{flex:1, justifyContent:'center'}}>
+          <View style={{borderColor:'orange',borderWidth:2, justifyContent:'center',alignItems:'center',
+        margin:10, padding:10}}>
+            <Text>
+              Book Name 
+            </Text>
+            <Text>{this.state.requestedBookName}</Text>
+          </View>
+
+          <View style={{borderColor:'orange',borderWidth:2, justifyContent:'center',alignItems:'center',
+        margin:10, padding:10}}>
+            <Text>
+              Book Status 
+            </Text>
+            <Text>{this.state.bookStatus}</Text>
+          </View>
+          <TouchableOpacity 
+          onPress={()=>{
+            this.sendNotification()
+            this.updateBookRequestStatus()
+            this.receivedBooks(this.state.requestedBookName) 
+          }}
+          style={{borderWidth:1, borderColor:'orange', width:300, alignSelf:'center', alignItems:'center', height:30, marginTop:30}}>
+            <Text >I received the book</Text>
+          </TouchableOpacity>
         </View>
-    )
+      )
+    }else{
+
+      return(
+          <View style={{flex:1}}>
+            <MyHeader title="Request Book" navigation ={this.props.navigation}/>
+              <KeyboardAvoidingView style={styles.keyBoardStyle}>
+                <TextInput
+                  style ={styles.formTextInput}
+                  placeholder={"enter book name"}
+                  onChangeText={(text)=>{
+                      this.setState({
+                          bookName:text
+                      })
+                  }}
+                  value={this.state.bookName}
+                />
+                <TextInput
+                  style ={[styles.formTextInput,{height:300}]}
+                  multiline
+                  numberOfLines ={8}
+                  placeholder={"Why do you need the book"}
+                  onChangeText ={(text)=>{
+                      this.setState({
+                          reasonToRequest:text
+                      })
+                  }}
+                  value ={this.state.reasonToRequest}
+                />
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={()=>{this.addRequest(this.state.bookName,this.state.reasonToRequest)}}
+                  >
+                  <Text>Request</Text>
+                </TouchableOpacity>
+              </KeyboardAvoidingView>
+          </View>
+      )
+   }
   }
 }
 

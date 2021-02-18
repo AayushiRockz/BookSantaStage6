@@ -110,7 +110,7 @@ showModal = ()=>{
         <TextInput
           style={styles.formTextInput}
           placeholder ={"Contact"}
-          maxLength ={10}
+          maxLength ={13}
           keyboardType={'numeric'}
           onChangeText={(text)=>{
             this.setState({

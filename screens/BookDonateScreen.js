@@ -42,6 +42,10 @@ export default class BookDonateScreen extends Component{
         title={item.book_name}
         subtitle={item.reason_to_request}
         titleStyle={{ color: 'black', fontWeight: 'bold' }}
+        leftElement={
+          <Image style={{height:50,width:50}}
+          source={{uri:item.image_link}}/>
+        }
         rightElement={
             <TouchableOpacity style={styles.button}
               onPress ={()=>{
